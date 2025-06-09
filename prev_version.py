@@ -15,7 +15,7 @@ from selenium.webdriver.common.keys import Keys
 
 class SearchBarApp:
     search_text = ""
-    preferred_manufacturers = ["moog", "timken", "skf", "ultra-power", "wjb", "durago"]
+    preferred_manufacturers = ["moog", "timken", "skf", "ultra-power", "wjb", "durago", "acdelco"]
     valid_previous_years = set()
     current_fitment_info = {}
     def __init__(self, root):
@@ -180,6 +180,11 @@ class SearchBarApp:
         return ('part_number', input_text)
 
     def perform_search(self):
+        # Clear all data structures
+        self.valid_previous_years.clear()
+        self.current_fitment_info.clear()
+        self.search_text = ""
+        
         # Clear previous results
         self.results_text.delete('1.0', tk.END)
         self.results_text.insert(tk.END, "Searching...\n")
@@ -264,6 +269,10 @@ class SearchBarApp:
             # Construct search string
             search_string = f"{make} {model} {year}"
             self.logger.info(f"Searching position fitment for: {search_string} ({position})")
+            
+            # Split compound filters (e.g., "front-awd" -> ["front", "awd"])
+            filters = position.lower().replace('-', ' ').split()
+            self.logger.info(f"Applying filters: {filters}")
             
             # Navigate to catalog
             self.driver.get("https://www.rockauto.com/en/catalog/")
@@ -369,12 +378,17 @@ class SearchBarApp:
                             self.logger.info(f"Regular click failed, trying JavaScript click: {str(click_error)}")
                             self.driver.execute_script("arguments[0].click();", part_type)
                         
-                        # Apply position filter
+                        # Apply each filter separately
                         input_element = WebDriverWait(self.driver, 10).until(
                             EC.presence_of_element_located((By.CLASS_NAME, 'filter-input'))
                         )
-                        input_element.send_keys(position)
-                        input_element.send_keys(Keys.ENTER)
+                        
+                        # Apply filters one by one
+                        for filter_term in filters:
+                            input_element.clear()  # Clear previous filter
+                            input_element.send_keys(filter_term)
+                            input_element.send_keys(Keys.ENTER)
+                            time.sleep(0.5)  # Wait for filter to apply
                         
                         # Check if there are any results after filtering
                         try:
@@ -398,7 +412,7 @@ class SearchBarApp:
                                         continue
                             
                         except TimeoutException:
-                            self.logger.info(f"No {position} fitment found for this engine")
+                            self.logger.info(f"No results found for filters: {filters}")
                             
                     except TimeoutException:
                         self.logger.info(f"Could not access Wheel Bearing & Hub")
@@ -586,7 +600,10 @@ class SearchBarApp:
 
             
             if not found_any_previous:
-                self.results_text.insert(tk.END, "No previous generation\n")    
+                no_prev_message = "no previous generation"
+                self.root.clipboard_clear()
+                self.root.clipboard_append(no_prev_message)
+                self.results_text.insert(tk.END, f"\n{no_prev_message} (copied to clipboard)\n")
                 self.root.update()
             else:
                 try:
