@@ -18,6 +18,7 @@ class SearchBarApp:
     preferred_manufacturers = ["moog", "timken", "skf", "ultra-power", "wjb", "durago", "acdelco"]
     valid_previous_years = set()
     current_fitment_info = {}
+    final_results_data = []
     def __init__(self, root):
         self.root = root
         self.root.title("Search Bar")
@@ -184,6 +185,7 @@ class SearchBarApp:
         self.valid_previous_years.clear()
         self.current_fitment_info.clear()
         self.search_text = ""
+        self.final_results_data.clear()
         
         # Clear previous results
         self.results_text.delete('1.0', tk.END)
@@ -635,12 +637,42 @@ class SearchBarApp:
                             if current_make == prev_make and current_model == prev_model_name:
                                 position, drive_type = self.current_fitment_info[current_key]
                                 self.logger.info(f"Found match! Adding to display: {prev_year} {prev_make} {prev_model_name}")
+                                # Store in data structure for later search
+                                self.final_results_data.append({
+                                    "prev_year": prev_year,
+                                    "make": prev_make,
+                                    "model": prev_model_name,
+                                    "current_year": current_year,
+                                    "position": position,
+                                    "drive_type": drive_type
+                                })
                                 self.results_text.insert(tk.END, f"{prev_year} {prev_make} {prev_model_name}\n")
                                 self.results_text.insert(tk.END, f"Current fitment ({current_year}): {position}, {drive_type}\n")
                                 self.results_text.insert(tk.END, "-" * 40 + "\n")
                                 break
                     
                     self.root.update()
+
+                    for entry in self.final_results_data:
+                        self.logger.info(f"Finding fitment for {entry['make']} {entry['model']} {entry['prev_year']} {entry['position']}")
+                        part_number, manufacturer = self.find_position_fitment(entry["make"], entry["model"], entry["prev_year"], entry["position"])
+                        if part_number:
+                            # Copy part number to clipboard using tkinter
+                            self.root.clipboard_clear()
+                            self.root.clipboard_append(part_number)
+                            result_text += f"\nFound {entry['position']} fitment:\n"
+                            result_text += f"Part Number: {part_number} (copied to clipboard)\n"
+                            result_text += f"Manufacturer: {manufacturer}\n"
+                            result_text += "-" * 40 + "\n"
+                            self.results_text.insert(tk.END, result_text)
+                            self.root.update()
+                            # Stop processing if fitment is found
+                            break
+                        else:
+                            self.logger.info(f"No fitment found for {entry['make']} {entry['model']} {entry['prev_year']} {entry['position']}")
+                            self.results_text.insert(tk.END, f"No fitment found for {entry['make']} {entry['model']} {entry['prev_year']} {entry['position']}\n")
+                            self.results_text.insert(tk.END, "-" * 40 + "\n")
+                            self.root.update()
 
                 except Exception as e:
                     self.logger.error(f"Search failed: {str(e)}")
